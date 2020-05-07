@@ -66,6 +66,7 @@ func Print(w io.Writer, root *html.Node) error {
 	p := printer{
 		w:         w,
 		indentStr: "  ",
+		wrapWidth: 120,
 		lineStart: true,
 	}
 	if err := p.doc(root); err != nil {
@@ -81,7 +82,10 @@ type printer struct {
 	literalDepth int
 
 	indentStr string
+	wrapWidth int
+
 	lineStart bool
+	lineWidth int
 	level     int
 }
 
@@ -121,19 +125,26 @@ func (p *printer) element(n *html.Node) error {
 		p.endl()
 	}
 
+	// If we're starting on a new line, indent attributes to the tag name plus a space when wrapping.
+	wi := 0
+	if p.lineStart {
+		wi = len(tag) + 2
+	}
+
 	p.indent()
-	p.write("<" + tag)
+	p.wrap("<"+tag, 0)
 	for _, a := range n.Attr {
-		p.write(" " + a.Key)
+		as := " " + a.Key
 		if len(a.Val) > 0 {
 			// Just escape double-quotes.
 			// TODO: Ambiguous ampersands (/&[a-zA-Z0-9]+;/) are also disallowed, but I'm ignoring
 			// those for now. See https://html.spec.whatwg.org/multipage/syntax.html#syntax-attributes.
 			escaped := strings.ReplaceAll(a.Val, `"`, `&quot;`)
-			p.write(`="` + escaped + `"`)
+			as += `="` + escaped + `"`
 		}
+		p.wrap(as, wi)
 	}
-	p.write(">")
+	p.write(">") // avoid wrapping closing bracket since it'd look funny
 
 	literal := literalTags.has(n)
 	if literal {
@@ -142,6 +153,8 @@ func (p *printer) element(n *html.Node) error {
 
 	omitClose := omitCloseTags.has(n)
 	if !inline && !omitClose {
+		// TODO: It'd be nice to put the closing tag on the same line as the opening one if no children
+		// get printed, but with the way this code is currently structured, that'd require a time machine.
 		p.endl()
 	}
 
@@ -211,6 +224,8 @@ func (p *printer) text(n *html.Node) error {
 		return nil
 	}
 
+	log.Printf("orig text: %q", n.Data)
+
 	// Collapse whitespace for an inline formatting context roughly following the process
 	// described in "How does CSS process whitespace?" in
 	// https://developer.mozilla.org/en-US/docs/Web/API/Document_Object_Model/Whitespace.
@@ -227,18 +242,50 @@ func (p *printer) text(n *html.Node) error {
 		s = strings.TrimRight(s, " ")
 	}
 
-	if s != "" {
-		p.indent()
-		p.write(s)
+	log.Printf("trimmed text: %q", s)
+	if s == "" {
+		return nil
+	}
+
+	p.indent()
+
+	// Write the text one word at a time.
+	// This is hopefully safe since we condensed spaces above.
+	startSpace := s[0] == ' '
+	endSpace := s[len(s)-1] == ' '
+	words := strings.Fields(strings.TrimSpace(s))
+	for i, w := range words {
+		// Try to preserve starting and ending spaces. Also prepend a space to each
+		// word, and avoid adding two spaces if we started with just one word consisting
+		// of a single space.
+		if (i == 0 && startSpace) || i != 0 {
+			w = " " + w
+		}
+		if i == len(words)-1 && endSpace && w != " " {
+			w = w + " "
+		}
+		log.Printf("word: %q", w)
+		p.wrap(w, 0)
 	}
 	return nil
 }
 
 // indent writes the proper amount of whitespace if lineStart is true and literalDepth is 0.
 func (p *printer) indent() {
-	if !p.inLiteral() && p.lineStart {
-		p.write(strings.Repeat(p.indentStr, p.level))
+	if p.inLiteral() || !p.lineStart {
+		return
 	}
+	s := strings.Repeat(p.indentStr, p.level)
+	p.write(s) // updates lineStart and lineWidth
+}
+
+func (p *printer) wrap(s string, extra int) {
+	if !p.inLiteral() && p.lineWidth+len(s) > p.wrapWidth {
+		p.endl()
+		p.indent()
+		s = strings.Repeat(" ", extra) + strings.TrimLeft(s, " ")
+	}
+	p.write(s)
 }
 
 // endl terminates the current line by writing a newline and setting lineStart to true.
@@ -252,13 +299,15 @@ func (p *printer) endl() {
 	}
 	p.write("\n")
 	p.lineStart = true
+	p.lineWidth = 0
 }
 
-// write outputs s and sets lineStart to false.
+// write outputs s, sets lineStart to false, and increments lineWidth.
 func (p *printer) write(s string) {
 	if p.werr != nil {
 		return
 	}
 	_, p.werr = io.WriteString(p.w, s)
 	p.lineStart = false
+	p.lineWidth += len(s)
 }

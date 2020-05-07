@@ -62,6 +62,15 @@ var omitCloseTags = newTagSet(strings.Fields("li"))
 // Elements whose contents should be preserved unchanged.
 var literalTags = newTagSet(strings.Fields("pre script style"))
 
+func Print(w io.Writer, root *html.Node) error {
+	p := printer{
+		w:         w,
+		indentStr: "  ",
+		lineStart: true,
+	}
+	return p.doc(root)
+}
+
 type printer struct {
 	w   io.Writer
 	err error
@@ -73,13 +82,8 @@ type printer struct {
 	level     int
 }
 
-func Print(w io.Writer, root *html.Node) error {
-	p := printer{
-		w:         w,
-		indentStr: "  ",
-		lineStart: true,
-	}
-	return p.doc(root)
+func (p *printer) inLiteral() bool {
+	return p.literalDepth > 0
 }
 
 func (p *printer) doc(n *html.Node) error {
@@ -107,7 +111,7 @@ func (p *printer) element(n *html.Node) {
 	}
 
 	inline := inlineTags.has(n)
-	if !inline && p.literalDepth == 0 && !p.lineStart {
+	if !inline {
 		p.endl()
 	}
 
@@ -127,22 +131,26 @@ func (p *printer) element(n *html.Node) {
 	p.write(">")
 
 	literal := literalTags.has(n)
-	omitClose := omitCloseTags.has(n)
-	if !inline && !literal && !omitClose {
-		p.endl()
-	}
-
-	if voidTags.has(n) {
-		return
-	}
-
-	if !inline && !literal {
-		p.level++
-	}
 	if literal {
 		p.literalDepth++
 	}
 
+	omitClose := omitCloseTags.has(n)
+	if !inline && !omitClose {
+		p.endl()
+	}
+
+	if voidTags.has(n) {
+		if literal {
+			panic(fmt.Sprintf("<%s> is both literal and void", tag))
+		}
+		return
+	}
+
+	// Indent if needed and print the children.
+	if !inline {
+		p.level++
+	}
 	for c := n.FirstChild; c != nil; c = c.NextSibling {
 		switch c.Type {
 		case html.ElementNode:
@@ -151,20 +159,20 @@ func (p *printer) element(n *html.Node) {
 			p.text(c)
 		}
 	}
+	if !inline {
+		p.level--
+		p.endl()
+	}
 
 	if literal {
 		p.literalDepth--
-	}
-	if !inline && !literal {
-		p.level--
-		p.endl()
 	}
 
 	if !omitClose {
 		p.indent()
 		p.write("</" + tag + ">")
 	}
-	if !inline && !literal {
+	if !inline {
 		p.endl()
 	}
 }
@@ -183,7 +191,7 @@ func (p *printer) text(n *html.Node) {
 		return
 	}
 
-	if p.literalDepth > 0 {
+	if p.inLiteral() {
 		p.write(n.Data)
 		return
 	}
@@ -212,14 +220,17 @@ func (p *printer) text(n *html.Node) {
 
 // indent writes the proper amount of whitespace if lineStart is true and literalDepth is 0.
 func (p *printer) indent() {
-	if p.lineStart && p.literalDepth == 0 {
+	if !p.inLiteral() && p.lineStart {
 		p.write(strings.Repeat(p.indentStr, p.level))
 	}
 }
 
 // endl terminates the current line by writing a newline and setting lineStart to true.
-// It does nothing if lineStart was already true.
+// It does nothing if lineStart was already true or if we're printing literally.
 func (p *printer) endl() {
+	if p.inLiteral() {
+		return
+	}
 	if p.lineStart {
 		return
 	}

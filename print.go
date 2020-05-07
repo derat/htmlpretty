@@ -68,12 +68,15 @@ func Print(w io.Writer, root *html.Node) error {
 		indentStr: "  ",
 		lineStart: true,
 	}
-	return p.doc(root)
+	if err := p.doc(root); err != nil {
+		return err
+	}
+	return p.werr
 }
 
 type printer struct {
-	w   io.Writer
-	err error
+	w    io.Writer
+	werr error // first error seen while writing to w
 
 	literalDepth int
 
@@ -96,7 +99,9 @@ func (p *printer) doc(n *html.Node) error {
 			p.write("<!DOCTYPE>")
 			p.endl()
 		case html.ElementNode:
-			p.element(c)
+			if err := p.element(c); err != nil {
+				return err
+			}
 		default:
 			return fmt.Errorf("unhandled document child with type %v", c.Type)
 		}
@@ -105,9 +110,10 @@ func (p *printer) doc(n *html.Node) error {
 }
 
 // text handles the supplied node of type html.ElementNode.
-func (p *printer) element(n *html.Node) {
+func (p *printer) element(n *html.Node) error {
+	tag := n.Data
 	if n.Type != html.ElementNode {
-		panic(fmt.Sprintf("Got non-element node %q (type %v)", n.Data, n.Type))
+		panic(fmt.Sprintf("Got non-element node %q (type %v)", tag, n.Type))
 	}
 
 	inline := inlineTags.has(n)
@@ -115,7 +121,6 @@ func (p *printer) element(n *html.Node) {
 		p.endl()
 	}
 
-	tag := n.Data
 	p.indent()
 	p.write("<" + tag)
 	for _, a := range n.Attr {
@@ -144,7 +149,7 @@ func (p *printer) element(n *html.Node) {
 		if literal {
 			panic(fmt.Sprintf("<%s> is both literal and void", tag))
 		}
-		return
+		return nil
 	}
 
 	// Indent if needed and print the children.
@@ -154,9 +159,18 @@ func (p *printer) element(n *html.Node) {
 	for c := n.FirstChild; c != nil; c = c.NextSibling {
 		switch c.Type {
 		case html.ElementNode:
-			p.element(c)
+			if err := p.element(c); err != nil {
+				return err
+			}
 		case html.TextNode:
-			p.text(c)
+			if err := p.text(c); err != nil {
+				return err
+			}
+		case html.CommentNode:
+			// TODO: Don't strip comments, maybe?
+			continue
+		default:
+			return fmt.Errorf("unexpected node %q of type %d", c.Data, c.Type)
 		}
 	}
 	if !inline {
@@ -175,25 +189,26 @@ func (p *printer) element(n *html.Node) {
 	if !inline {
 		p.endl()
 	}
+	return nil
 }
 
 var spaceAroundNewline *regexp.Regexp = regexp.MustCompile("(?s)[ \t]*\n[ \t]*")
 var repeatedSpace *regexp.Regexp = regexp.MustCompile("  +")
 
 // text handles the supplied node of type html.TextNode.
-func (p *printer) text(n *html.Node) {
+func (p *printer) text(n *html.Node) error {
 	if n.Type != html.TextNode {
 		panic(fmt.Sprintf("Got non-text node %q (type %v)", n.Data, n.Type))
 	}
 
 	// TODO: Can this actually happen?
 	if len(n.Data) == 0 {
-		return
+		return nil
 	}
 
 	if p.inLiteral() {
 		p.write(n.Data)
-		return
+		return nil
 	}
 
 	// Collapse whitespace for an inline formatting context roughly following the process
@@ -216,6 +231,7 @@ func (p *printer) text(n *html.Node) {
 		p.indent()
 		p.write(s)
 	}
+	return nil
 }
 
 // indent writes the proper amount of whitespace if lineStart is true and literalDepth is 0.
@@ -240,9 +256,9 @@ func (p *printer) endl() {
 
 // write outputs s and sets lineStart to false.
 func (p *printer) write(s string) {
-	if p.err != nil {
+	if p.werr != nil {
 		return
 	}
-	_, p.err = io.WriteString(p.w, s)
+	_, p.werr = io.WriteString(p.w, s)
 	p.lineStart = false
 }

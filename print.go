@@ -224,8 +224,6 @@ func (p *printer) text(n *html.Node) error {
 		return nil
 	}
 
-	log.Printf("orig text: %q", n.Data)
-
 	// Collapse whitespace for an inline formatting context roughly following the process
 	// described in "How does CSS process whitespace?" in
 	// https://developer.mozilla.org/en-US/docs/Web/API/Document_Object_Model/Whitespace.
@@ -242,7 +240,6 @@ func (p *printer) text(n *html.Node) error {
 		s = strings.TrimRight(s, " ")
 	}
 
-	log.Printf("trimmed text: %q", s)
 	if s == "" {
 		return nil
 	}
@@ -264,7 +261,6 @@ func (p *printer) text(n *html.Node) error {
 		if i == len(words)-1 && endSpace && w != " " {
 			w = w + " "
 		}
-		log.Printf("word: %q", w)
 		p.wrap(w, 0)
 	}
 	return nil

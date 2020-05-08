@@ -185,3 +185,20 @@ func TestPrint_Escaping(t *testing.T) {
 `
 	checkPrint(t, doc, "  ", 80, doc)
 }
+
+func TestPrint_NoWrap(t *testing.T) {
+	checkPrint(t, `<!DOCTYPE html>
+<html>
+  <head>
+  </head>
+  <body>
+    Here's a very long line. It keeps going and going, without any end in sight. Whatever will we do? I guess we'll just need to wait and see if its author gets tired of typing nonsense at some point.
+  </body>
+</html>
+`, "  ", 0, `<!DOCTYPE html>
+<html>
+  <head></head>
+  <body>Here's a very long line. It keeps going and going, without any end in sight. Whatever will we do? I guess we'll just need to wait and see if its author gets tired of typing nonsense at some point.</body>
+</html>
+`)
+}

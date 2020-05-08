@@ -266,7 +266,8 @@ func (p *printer) maybeIndent() {
 // wrap writes s, first writing a newline and indentation if we would exceed p.wrapWidth.
 // extra denotes extra indentation to use if the line is wrapped.
 func (p *printer) wrap(s, extra string) {
-	if !p.inLiteral() && !p.inKeepSpace() && p.lineWidth+len(s) > p.wrapWidth {
+	if !p.inLiteral() && !p.inKeepSpace() &&
+		p.wrapWidth > 0 && p.lineWidth+len(s) > p.wrapWidth {
 		p.endl()
 		p.maybeIndent()
 		s = extra + strings.TrimLeft(s, " ")
@@ -320,7 +321,7 @@ func (p *printer) openTag(n *html.Node) (forceInline bool) {
 	// be wrapped... unless they're following a text node that didn't end with whitespace,
 	// in which case we need to be careful to not introduce new whitespace by wrapping.
 	inline := inlineTags.has(n)
-	wouldWrap := p.lineWidth+tagLen > p.wrapWidth
+	wouldWrap := p.wrapWidth > 0 && p.lineWidth+tagLen > p.wrapWidth
 	prevTextNotSpace := n.PrevSibling != nil && n.PrevSibling.Type == html.TextNode &&
 		(n.PrevSibling.Data == "" ||
 			!whitespace.MatchString(n.PrevSibling.Data[len(n.PrevSibling.Data)-1:]))
@@ -341,7 +342,7 @@ func (p *printer) openTag(n *html.Node) (forceInline bool) {
 		} else if hasSingleChild(n) && n.FirstChild.Type == html.TextNode {
 			childLen = len(collapseText(escapeText(n.FirstChild.Data), nil, nil))
 		}
-		if childLen >= 0 && p.lineWidth+tagLen+childLen+len(closeTag(n)) < p.wrapWidth {
+		if childLen >= 0 && (p.lineWidth+tagLen+childLen+len(closeTag(n)) < p.wrapWidth || p.wrapWidth <= 0) {
 			forceInline = true
 		}
 	}

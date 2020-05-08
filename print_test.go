@@ -82,6 +82,11 @@ func TestPrint_Wrapping(t *testing.T) {
     <p>
       Inline because short.
     </p>
+    <no-child></no-child>
+    <no-child-wrap>
+    </no-child-wrap>
+    <no-child-but-long-tag-name-should-wrap>
+    </no-child-but-long-tag-name-should-wrap>
     <pre> Preserve  
   space    here.
 		</pre>
@@ -127,6 +132,10 @@ func TestPrint_Wrapping(t *testing.T) {
       Or the end here (<a>an anchor tag</a>).
     </p>
     <p>Inline because short.</p>
+    <no-child></no-child>
+    <no-child-wrap></no-child-wrap>
+    <no-child-but-long-tag-name-should-wrap>
+    </no-child-but-long-tag-name-should-wrap>
     <pre> Preserve  
   space    here.
 		</pre>

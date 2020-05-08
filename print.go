@@ -139,8 +139,6 @@ func (p *printer) element(n *html.Node) error {
 
 	omitClose := omitCloseTags.has(n)
 	if !inline && !omitClose {
-		// TODO: It might be nice to put the closing tag on the same line as the opening one if no children
-		// get printed, but with the way this code is currently structured, that'd require a time machine.
 		p.endl()
 	}
 
@@ -337,12 +335,15 @@ func (p *printer) openTag(n *html.Node) (forceInline bool) {
 
 	// If it looks like we can fit everything including the closing tag on a single line,
 	// treat this tag as inline.
-	// TODO: Also permit no children.
 	if !literalTags.has(n) && !p.inLiteral() &&
-		!keepSpaceTags.has(n) && !p.inKeepSpace() && !inline &&
-		hasSingleChild(n) && n.FirstChild.Type == html.TextNode {
-		childLen := len(collapseText(escapeText(n.FirstChild.Data), nil, nil))
-		if p.lineWidth+tagLen+childLen+len(closeTag(n)) < p.wrapWidth {
+		!keepSpaceTags.has(n) && !p.inKeepSpace() {
+		childLen := -1
+		if n.FirstChild == nil {
+			childLen = 0
+		} else if hasSingleChild(n) && n.FirstChild.Type == html.TextNode {
+			childLen = len(collapseText(escapeText(n.FirstChild.Data), nil, nil))
+		}
+		if childLen >= 0 && p.lineWidth+tagLen+childLen+len(closeTag(n)) < p.wrapWidth {
 			forceInline = true
 		}
 	}

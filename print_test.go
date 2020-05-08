@@ -86,6 +86,12 @@ func TestPrint_Wrapping(t *testing.T) {
   space    here.
 		</pre>
     <some-custom-element here="is an attribute with a value that can't be wrapped" and here are other attributes></some-custom-element>
+    <p>
+      <a href="/keep/this/long/first/attribute/on/the/same/line/as/the/opening/tag" but wrap everything else>link</a>
+    </p>
+    <p>
+      Only do that<a href="/when/the/tag/starts/the/line/though" attr>link</a>.
+    </p>
    </body>
 </html>
 `, "  ", 41, `<!DOCTYPE html>
@@ -128,13 +134,18 @@ func TestPrint_Wrapping(t *testing.T) {
         here="is an attribute with a value that can't be wrapped"
         and here are other attributes>
     </some-custom-element>
+    <p>
+      <a href="/keep/this/long/first/attribute/on/the/same/line/as/the/opening/tag"
+          but wrap everything else>link</a>
+    </p>
+    <p>
+      Only do that<a
+      href="/when/the/tag/starts/the/line/though"
+      attr>link</a>.
+    </p>
   </body>
 </html>
 `)
-	// TODO: Add a test for long links (and fix the code).
-	// Right now, we wrap after "<a" and indent "href"
-	// by four spaces, which is dumb. It'd be better to just
-	// put "href" on the previous line.
 }
 
 func TestPrint_Escaping(t *testing.T) {

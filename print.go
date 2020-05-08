@@ -347,23 +347,28 @@ func (p *printer) openTag(n *html.Node) (forceInline bool) {
 		}
 	}
 
-	// As described above, avoid wrapping the start of inline nodes preceded by non-whitespace.
-	if (inline || forceInline) && prevNonSpace {
-		p.write(tokens[0])
-	} else {
-		p.wrap(tokens[0], "")
-	}
-
-	// Let the remainder of opening tag wrap.
-	// If the token started on a new line (either explicitly or incidentally),
-	// indent attributes two more levels.
-	// TODO: Also put the first attribute on the same line?
+	var unwrapTokens int
 	var wrapIndent string
 	if startedLine {
+		// Indent wrapped attributes two levels.
 		wrapIndent = strings.Repeat(p.indentStr, 2)
+		unwrapTokens = 1
+		// If the first token is shorter than the amount of indenting on the next
+		// line, it's better to put the second token on the first line.
+		if len(tokens[0]) < len(wrapIndent) {
+			unwrapTokens = 2
+		}
+	} else if (inline || forceInline) && prevNonSpace {
+		// As described above in the prevNonSpace comment, avoid
+		// wrapping the start of inline nodes preceded by non-whitespace.
+		unwrapTokens = 1
 	}
-	for _, t := range tokens[1:] {
-		p.wrap(t, wrapIndent)
+	for i, t := range tokens {
+		if i < unwrapTokens {
+			p.write(t)
+		} else {
+			p.wrap(t, wrapIndent)
+		}
 	}
 
 	return forceInline

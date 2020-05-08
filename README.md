@@ -45,5 +45,5 @@ reads a document from stdin and writes it to stdout is also provided:
 
 ```sh
 % go install github.com/derat/htmlpretty/cmd/htmlpretty
-% htmlpretty --indent='    ' --wrap=80 <old.html >new.html
+% htmlpretty -indent='    ' -wrap=80 <old.html >new.html
 ```

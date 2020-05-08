@@ -411,7 +411,7 @@ var whitespace *regexp.Regexp = regexp.MustCompile(`[\t\n\f\r ]+`)
 func collapseText(s string, prevSib, nextSib *html.Node) string {
 	s = whitespace.ReplaceAllString(s, " ")
 
-	// Drop leading and trailing whitespace if we don't have symblings that will be printed
+	// Drop leading and trailing whitespace if we don't have siblings that will be printed
 	// adjacent to us -- we can presumably just use the printer's whitespace in that case.
 	if !inlineTags.has(prevSib) {
 		s = strings.TrimLeft(s, " ")

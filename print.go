@@ -88,7 +88,7 @@ type printer struct {
 func (p *printer) inLiteral() bool {
 	return p.literalDepth > 0
 }
-func (p *printer) keepSpace() bool {
+func (p *printer) inKeepSpace() bool {
 	return p.keepSpaceDepth > 0
 }
 
@@ -121,77 +121,30 @@ func (p *printer) element(n *html.Node) error {
 		return fmt.Errorf("got non-element node %q of type %v", tag, n.Type)
 	}
 
+	// Print the opening tag first.
 	inline := inlineTags.has(n)
+	if forceInline := p.openTag(n); forceInline {
+		inline = true
+	}
+
+	// Preserve the formatting of the things that we'll print next if needed.
 	literal := literalTags.has(n)
-	keepSpace := keepSpaceTags.has(n)
-	omitClose := omitCloseTags.has(n)
-	void := voidTags.has(n)
-
-	// Construct the opening tag.
-	tokens := openTagTokens(n)
-	openTagLen := len(strings.Join(tokens, ""))
-
-	// Start a new line for non-inline nodes. Also start inline nodes on a new line if they'd
-	// be wrapped... unless they're following a text node that didn't end with whitespace,
-	// in which case we need to be careful to not introduce new whitespace by wrapping.
-	wouldWrap := p.lineWidth+openTagLen > p.wrapWidth
-	prevNonSpace := n.PrevSibling != nil &&
-		(n.PrevSibling.Type != html.TextNode ||
-			!unicode.IsSpace(rune(n.PrevSibling.Data[len(n.PrevSibling.Data)-1])))
-	if !inline || (wouldWrap && !prevNonSpace) {
-		p.endl()
-	}
-
-	startedLine := p.lineStart
-	p.maybeIndent()
-
-	var closeTag string
-	if !void && !omitClose {
-		closeTag = "</" + n.Data + ">"
-	}
-
-	// If it looks like we can fit everything including the closing tag on a single line,
-	// treat this tag as inline.
-	if !p.inLiteral() && !p.keepSpace() && !inline && hasSingleChild(n) && n.FirstChild.Type == html.TextNode {
-		childLen := len(collapseText(escapeText(n.FirstChild.Data), nil, nil))
-		if p.lineWidth+openTagLen+childLen+len(closeTag) < p.wrapWidth {
-			inline = true
-		}
-	}
-
-	// As described above, avoid wrapping the start of inline nodes preceded by non-whitespace.
-	if inline && prevNonSpace {
-		p.write(tokens[0])
-	} else {
-		p.wrap(tokens[0], "")
-	}
-
-	// Let the remainder of opening tag wrap.
-	// If the token started on a new line (either explicitly or incidentally),
-	// indent attributes two more levels.
-	// TODO: Also put the first attribute on the same line?
-	var wrapIndent string
-	if startedLine {
-		wrapIndent = strings.Repeat(p.indentStr, 2)
-	}
-	for _, t := range tokens[1:] {
-		p.wrap(t, wrapIndent)
-	}
-
 	if literal {
 		p.literalDepth++
 	}
+	keepSpace := keepSpaceTags.has(n)
 	if keepSpace {
 		p.keepSpaceDepth++
 	}
 
+	omitClose := omitCloseTags.has(n)
 	if !inline && !omitClose {
 		// TODO: It might be nice to put the closing tag on the same line as the opening one if no children
 		// get printed, but with the way this code is currently structured, that'd require a time machine.
 		p.endl()
 	}
 
-	if void {
+	if voidTags.has(n) {
 		if literal || keepSpace {
 			panic(fmt.Sprintf("<%s> is both literal/keep-space and void", n.Data))
 		}
@@ -224,6 +177,7 @@ func (p *printer) element(n *html.Node) error {
 		p.endl()
 	}
 
+	// TODO: This seems like it should happen after the closing tag is printed...
 	if literal {
 		p.literalDepth--
 	}
@@ -233,7 +187,7 @@ func (p *printer) element(n *html.Node) error {
 
 	if !omitClose {
 		p.maybeIndent()
-		p.write(closeTag)
+		p.write(closeTag(n))
 	}
 	if !inline {
 		p.endl()
@@ -263,7 +217,7 @@ func (p *printer) text(n *html.Node) error {
 	s = escapeText(s)
 
 	// If we're preserving spaces (i.e. in <pre>), we need to perform escaping.
-	if p.keepSpace() {
+	if p.inKeepSpace() {
 		p.write(s)
 		return nil
 	}
@@ -307,7 +261,7 @@ func (p *printer) text(n *html.Node) error {
 // maybeIndent writes the proper amount of whitespace if we're at the start of a line
 // and not currently printing literally.
 func (p *printer) maybeIndent() {
-	if p.inLiteral() || p.keepSpace() || !p.lineStart {
+	if p.inLiteral() || p.inKeepSpace() || !p.lineStart {
 		return
 	}
 	s := strings.Repeat(p.indentStr, p.level)
@@ -317,7 +271,7 @@ func (p *printer) maybeIndent() {
 // wrap writes s, first writing a newline and indentation if we would exceed p.wrapWidth.
 // extra denotes extra indentation to use if the line is wrapped.
 func (p *printer) wrap(s, extra string) {
-	if !p.inLiteral() && !p.keepSpace() && p.lineWidth+len(s) > p.wrapWidth {
+	if !p.inLiteral() && !p.inKeepSpace() && p.lineWidth+len(s) > p.wrapWidth {
 		p.endl()
 		p.maybeIndent()
 		s = extra + strings.TrimLeft(s, " ")
@@ -328,7 +282,7 @@ func (p *printer) wrap(s, extra string) {
 // endl terminates the current line by writing a newline and setting lineStart to true.
 // It does nothing if we're already at the start of a line or if we're printing literally.
 func (p *printer) endl() {
-	if p.inLiteral() || p.keepSpace() {
+	if p.inLiteral() || p.inKeepSpace() {
 		return
 	}
 	if p.lineStart {
@@ -349,11 +303,10 @@ func (p *printer) write(s string) {
 	p.lineWidth += len(s)
 }
 
-// openTagTokens returns tokens for printing n's opening tag.
-// The returned tokens are of the form [`<foo`, ` abc`, ` def="123">`].
-func openTagTokens(n *html.Node) []string {
+func (p *printer) openTag(n *html.Node) (forceInline bool) {
+	// Construct the opening tag.
+	// The tokens are of the form [`<foo`, ` abc`, ` def="123">`].
 	tokens := append([]string{}, "<"+n.Data)
-
 	for _, a := range n.Attr {
 		as := " " + a.Key
 		if len(a.Val) > 0 {
@@ -365,14 +318,70 @@ func openTagTokens(n *html.Node) []string {
 		}
 		tokens = append(tokens, as)
 	}
-
 	tokens[len(tokens)-1] += ">" // avoid wrapping closing bracket since it'd look funny
-	return tokens
+	tagLen := len(strings.Join(tokens, ""))
+
+	// Start a new line for non-inline nodes. Also start inline nodes on a new line if they'd
+	// be wrapped... unless they're following a text node that didn't end with whitespace,
+	// in which case we need to be careful to not introduce new whitespace by wrapping.
+	inline := inlineTags.has(n)
+	wouldWrap := p.lineWidth+tagLen > p.wrapWidth
+	prevNonSpace := n.PrevSibling != nil &&
+		(n.PrevSibling.Type != html.TextNode ||
+			!unicode.IsSpace(rune(n.PrevSibling.Data[len(n.PrevSibling.Data)-1])))
+	if !inline || (wouldWrap && !prevNonSpace) {
+		p.endl()
+	}
+
+	startedLine := p.lineStart
+	p.maybeIndent()
+
+	// If it looks like we can fit everything including the closing tag on a single line,
+	// treat this tag as inline.
+	// TODO: Also permit no children.
+	if !literalTags.has(n) && !p.inLiteral() &&
+		!keepSpaceTags.has(n) && !p.inKeepSpace() && !inline &&
+		hasSingleChild(n) && n.FirstChild.Type == html.TextNode {
+		childLen := len(collapseText(escapeText(n.FirstChild.Data), nil, nil))
+		if p.lineWidth+tagLen+childLen+len(closeTag(n)) < p.wrapWidth {
+			forceInline = true
+		}
+	}
+
+	// As described above, avoid wrapping the start of inline nodes preceded by non-whitespace.
+	if (inline || forceInline) && prevNonSpace {
+		p.write(tokens[0])
+	} else {
+		p.wrap(tokens[0], "")
+	}
+
+	// Let the remainder of opening tag wrap.
+	// If the token started on a new line (either explicitly or incidentally),
+	// indent attributes two more levels.
+	// TODO: Also put the first attribute on the same line?
+	var wrapIndent string
+	if startedLine {
+		wrapIndent = strings.Repeat(p.indentStr, 2)
+	}
+	for _, t := range tokens[1:] {
+		p.wrap(t, wrapIndent)
+	}
+
+	return forceInline
 }
 
 // hasSingleChild returns true if n has a single child.
 func hasSingleChild(n *html.Node) bool {
 	return n.FirstChild != nil && n.FirstChild == n.LastChild
+}
+
+// closeTag constructs a closing tag for n, e.g. "</strong>".
+// An empty string is returned if n is a void element or should omit its closing tag.
+func closeTag(n *html.Node) string {
+	if n.Type != html.ElementNode || voidTags.has(n) || omitCloseTags.has(n) {
+		return ""
+	}
+	return "</" + n.Data + ">"
 }
 
 // escapeText performs hacky, slow escaping on s.

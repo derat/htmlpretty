@@ -66,8 +66,11 @@ var inlineTags = newTagSet(strings.Fields("a b code em i span s strong"))
 // A newline is printed at the point where the closing tag would have appeared, though.
 var omitCloseTags = newTagSet(strings.Fields("li"))
 
-// Elements whose contents should be preserved unchanged.
-var literalTags = newTagSet(strings.Fields("pre script style"))
+// Elements whose contents should be preserved unchanged (i.e. no whitespace changes or escaping).
+var literalTags = newTagSet(strings.Fields("script style"))
+
+// Elements whose contents should retain their original whitespace but still be escaped.
+var keepSpaceTags = newTagSet(strings.Fields("pre"))
 
 type printer struct {
 	w         io.Writer
@@ -75,14 +78,18 @@ type printer struct {
 	indentStr string
 	wrapWidth int
 
-	level        int  // current indentation level
-	literalDepth int  // number of literalTags elements that we're nested in
-	lineStart    bool // true if we're at the start of a line
-	lineWidth    int  // width of the current line
+	level          int  // current indentation level
+	literalDepth   int  // number of literalTags elements that we're nested in
+	keepSpaceDepth int  // number of keepSpaceTags elements that we're nested in
+	lineStart      bool // true if we're at the start of a line
+	lineWidth      int  // width of the current line
 }
 
 func (p *printer) inLiteral() bool {
 	return p.literalDepth > 0
+}
+func (p *printer) keepSpace() bool {
+	return p.keepSpaceDepth > 0
 }
 
 // doc handles the supplied node of type html.DocumentNode.
@@ -154,6 +161,10 @@ func (p *printer) element(n *html.Node) error {
 	if literal {
 		p.literalDepth++
 	}
+	keepSpace := keepSpaceTags.has(n)
+	if keepSpace {
+		p.keepSpaceDepth++
+	}
 
 	omitClose := omitCloseTags.has(n)
 	if !inline && !omitClose {
@@ -163,8 +174,8 @@ func (p *printer) element(n *html.Node) error {
 	}
 
 	if voidTags.has(n) {
-		if literal {
-			panic(fmt.Sprintf("<%s> is both literal and void", n.Data))
+		if literal || keepSpace {
+			panic(fmt.Sprintf("<%s> is both literal/keep-space and void", n.Data))
 		}
 		return nil
 	}
@@ -198,6 +209,9 @@ func (p *printer) element(n *html.Node) error {
 	if literal {
 		p.literalDepth--
 	}
+	if keepSpace {
+		p.keepSpaceDepth--
+	}
 
 	if !omitClose {
 		p.maybeIndent()
@@ -217,13 +231,25 @@ func (p *printer) text(n *html.Node) error {
 		panic(fmt.Sprintf("Got non-text node %q (type %v)", n.Data, n.Type))
 	}
 
+	s := n.Data
 	// TODO: Can this actually happen?
-	if len(n.Data) == 0 {
+	if len(s) == 0 {
 		return nil
 	}
 
 	if p.inLiteral() {
-		p.write(n.Data)
+		p.write(s)
+		return nil
+	}
+
+	// Do some hacky escaping. Avoid using html.EscapeString since its aggressiveness is
+	// a bit annoying: it also escapes `'` and `"`.
+	s = strings.ReplaceAll(s, "&", "&amp;")
+	s = strings.ReplaceAll(s, "<", "&lt;")
+	s = strings.ReplaceAll(s, ">", "&gt;")
+
+	if p.keepSpace() {
+		p.write(s)
 		return nil
 	}
 
@@ -233,7 +259,7 @@ func (p *printer) text(n *html.Node) error {
 	// This is probably woefully inadequate: HTML whitespace is very complicated and I don't
 	// think it's actually possible to determine what's safe to do without knowing whether we're
 	// an inline, block, or inline-block context, which seems like it'd require handling CSS.
-	s := whitespace.ReplaceAllString(n.Data, " ")
+	s = whitespace.ReplaceAllString(s, " ")
 
 	// Drop leading and trailing whitespace if we don't have symblings that will be printed
 	// adjacent to us -- we can presumably just use the printer's whitespace in that case.
@@ -281,7 +307,7 @@ func (p *printer) text(n *html.Node) error {
 // maybeIndent writes the proper amount of whitespace if we're at the start of a line
 // and not currently printing literally.
 func (p *printer) maybeIndent() {
-	if p.inLiteral() || !p.lineStart {
+	if p.inLiteral() || p.keepSpace() || !p.lineStart {
 		return
 	}
 	s := strings.Repeat(p.indentStr, p.level)
@@ -291,7 +317,7 @@ func (p *printer) maybeIndent() {
 // wrap writes s, first writing a newline and indentation if we would exceed p.wrapWidth.
 // extra denotes extra indentation to use if the line is wrapped.
 func (p *printer) wrap(s, extra string) {
-	if !p.inLiteral() && p.lineWidth+len(s) > p.wrapWidth {
+	if !p.inLiteral() && !p.keepSpace() && p.lineWidth+len(s) > p.wrapWidth {
 		p.endl()
 		p.maybeIndent()
 		s = extra + strings.TrimLeft(s, " ")
@@ -302,7 +328,7 @@ func (p *printer) wrap(s, extra string) {
 // endl terminates the current line by writing a newline and setting lineStart to true.
 // It does nothing if we're already at the start of a line or if we're printing literally.
 func (p *printer) endl() {
-	if p.inLiteral() {
+	if p.inLiteral() || p.keepSpace() {
 		return
 	}
 	if p.lineStart {

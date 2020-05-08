@@ -117,4 +117,29 @@ func TestPrint_Wrapping(t *testing.T) {
   </body>
 </html>
 `)
+	// TODO: Add a test for long links (and fix the code).
+	// Right now, we wrap after "<a" and indent "href"
+	// by four spaces, which is dumb. It'd be better to just
+	// put "href" on the previous line.
+}
+
+func TestPrint_Escaping(t *testing.T) {
+	const doc = `<!DOCTYPE html>
+<html>
+  <head>
+    <script>
+      var i = 1 > 2; var j = 1 < 2;
+    </script>
+    <style>
+      div>span { color: black; }
+    </style>
+  </head>
+  <body>
+    Here's an escaped &lt;tag&gt; &amp; an "ampersand".
+    <pre>Here's another
+              escaped &lt;tag&gt;.</pre>
+  </body>
+</html>
+`
+	checkPrint(t, doc, "  ", 80, doc)
 }

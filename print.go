@@ -1,10 +1,11 @@
-package main
+// Copyright 2020 Daniel Erat <dan@erat.org>.
+// All rights reserved.
+
+package pretty
 
 import (
 	"fmt"
 	"io"
-	"log"
-	"os"
 	"regexp"
 	"strings"
 	"unicode"
@@ -12,15 +13,20 @@ import (
 	"golang.org/x/net/html"
 )
 
-func main() {
-	root, err := html.Parse(os.Stdin)
-	if err != nil {
-		log.Print("Parse failed: ", err)
-	} else {
-		if err := Print(os.Stdout, root); err != nil {
-			log.Print("Printing failed: ", err)
-		}
+// Print pretty-prints the supplied HTML document to w.
+// The supplied indent string is used for a single level of indenting.
+// If wrap is positive, lines will be wrapped at that many bytes where possible.
+func Print(w io.Writer, root *html.Node, indent string, wrap int) error {
+	p := printer{
+		w:         w,
+		indentStr: indent,
+		wrapWidth: wrap,
+		lineStart: true,
 	}
+	if err := p.doc(root); err != nil {
+		return err
+	}
+	return p.werr
 }
 
 // tagSet holds a set of HTML tag names.
@@ -63,37 +69,24 @@ var omitCloseTags = newTagSet(strings.Fields("li"))
 // Elements whose contents should be preserved unchanged.
 var literalTags = newTagSet(strings.Fields("pre script style"))
 
-func Print(w io.Writer, root *html.Node) error {
-	p := printer{
-		w:         w,
-		indentStr: "  ",
-		wrapWidth: 120,
-		lineStart: true,
-	}
-	if err := p.doc(root); err != nil {
-		return err
-	}
-	return p.werr
-}
-
 type printer struct {
-	w    io.Writer
-	werr error // first error seen while writing to w
-
-	literalDepth int
-
+	w         io.Writer
+	werr      error // first error seen while writing to w
 	indentStr string
 	wrapWidth int
 
-	lineStart bool
-	lineWidth int
-	level     int
+	level        int  // current indentation level
+	literalDepth int  // number of literalTags elements that we're nested in
+	lineStart    bool // true if we're at the start of a line
+	lineWidth    int  // width of the current line
 }
 
 func (p *printer) inLiteral() bool {
 	return p.literalDepth > 0
 }
 
+// doc handles the supplied node of type html.DocumentNode.
+// This is the main entry point into printer.
 func (p *printer) doc(n *html.Node) error {
 	if n.Type != html.DocumentNode {
 		return fmt.Errorf("root node has non-document type %v", n.Type)
@@ -108,17 +101,17 @@ func (p *printer) doc(n *html.Node) error {
 				return err
 			}
 		default:
-			return fmt.Errorf("unhandled document child with type %v", c.Type)
+			return fmt.Errorf("unhandled doc child %q with type %v", c.Data, c.Type)
 		}
 	}
 	return nil
 }
 
-// text handles the supplied node of type html.ElementNode.
+// element handles the supplied node of type html.ElementNode.
 func (p *printer) element(n *html.Node) error {
 	tag := n.Data
 	if n.Type != html.ElementNode {
-		panic(fmt.Sprintf("Got non-element node %q (type %v)", tag, n.Type))
+		return fmt.Errorf("got non-element node %q of type %v", tag, n.Type)
 	}
 
 	// Construct the opening tag.
@@ -137,19 +130,19 @@ func (p *printer) element(n *html.Node) error {
 	}
 
 	// If we're starting on a new line (either explicitly or incidentally),
-	// indent attributes to the tag name plus one space when wrapping.
-	wrapIndent := 0
+	// indent attributes two more levels.
+	var wrapIndent string
 	if p.lineStart {
-		wrapIndent = len(tokens[0]) + 1
+		wrapIndent = strings.Repeat(p.indentStr, 2)
 	}
 
-	p.indent()
+	p.maybeIndent()
 
 	// As described above, avoid wrapping the start of inline nodes preceded by non-whitespace.
 	if inline && prevNonSpace {
 		p.write(tokens[0])
 	} else {
-		p.wrap(tokens[0], 0)
+		p.wrap(tokens[0], wrapIndent)
 	}
 
 	// Let the remainder of opening tag wrap.
@@ -164,7 +157,7 @@ func (p *printer) element(n *html.Node) error {
 
 	omitClose := omitCloseTags.has(n)
 	if !inline && !omitClose {
-		// TODO: It'd be nice to put the closing tag on the same line as the opening one if no children
+		// TODO: It might be nice to put the closing tag on the same line as the opening one if no children
 		// get printed, but with the way this code is currently structured, that'd require a time machine.
 		p.endl()
 	}
@@ -207,7 +200,7 @@ func (p *printer) element(n *html.Node) error {
 	}
 
 	if !omitClose {
-		p.indent()
+		p.maybeIndent()
 		p.write("</" + n.Data + ">")
 	}
 	if !inline {
@@ -237,8 +230,13 @@ func (p *printer) text(n *html.Node) error {
 	// Collapse whitespace for an inline formatting context to achieve roughly the same effect
 	// as the process described in "How does CSS process whitespace?" in
 	// https://developer.mozilla.org/en-US/docs/Web/API/Document_Object_Model/Whitespace.
+	// This is probably woefully inadequate: HTML whitespace is very complicated and I don't
+	// think it's actually possible to determine what's safe to do without knowing whether we're
+	// an inline, block, or inline-block context, which seems like it'd require handling CSS.
 	s := whitespace.ReplaceAllString(n.Data, " ")
 
+	// Drop leading and trailing whitespace if we don't have symblings that will be printed
+	// adjacent to us -- we can presumably just use the printer's whitespace in that case.
 	if !inlineTags.has(n.PrevSibling) {
 		s = strings.TrimLeft(s, " ")
 	}
@@ -250,7 +248,7 @@ func (p *printer) text(n *html.Node) error {
 		return nil
 	}
 
-	p.indent()
+	p.maybeIndent()
 
 	// Write the text one word at a time.
 	// This is hopefully safe since we condensed spaces above.
@@ -269,19 +267,20 @@ func (p *printer) text(n *html.Node) error {
 		}
 
 		// Avoid wrapping the first part of the text node. We don't want to reformat input
-		// like "(<a>link</a>)" as "(<a>link</a>\n)".
-		// TODO: How to prevent breaking the start of the input?
+		// like "(<a>link</a>)" as "(<a>link</a>\n)". We try to avoid "(\n<a>link</a>)" by
+		// being careful in how we wrap opening tags in element().
 		if i == 0 {
 			p.write(w)
 		} else {
-			p.wrap(w, 0)
+			p.wrap(w, "")
 		}
 	}
 	return nil
 }
 
-// indent writes the proper amount of whitespace if lineStart is true and literalDepth is 0.
-func (p *printer) indent() {
+// maybeIndent writes the proper amount of whitespace if we're at the start of a line
+// and not currently printing literally.
+func (p *printer) maybeIndent() {
 	if p.inLiteral() || !p.lineStart {
 		return
 	}
@@ -289,17 +288,19 @@ func (p *printer) indent() {
 	p.write(s) // updates lineStart and lineWidth
 }
 
-func (p *printer) wrap(s string, extra int) {
+// wrap writes s, first writing a newline and indentation if we would exceed p.wrapWidth.
+// extra denotes extra indentation to use if the line is wrapped.
+func (p *printer) wrap(s, extra string) {
 	if !p.inLiteral() && p.lineWidth+len(s) > p.wrapWidth {
 		p.endl()
-		p.indent()
-		s = strings.Repeat(" ", extra) + strings.TrimLeft(s, " ")
+		p.maybeIndent()
+		s = extra + strings.TrimLeft(s, " ")
 	}
 	p.write(s)
 }
 
 // endl terminates the current line by writing a newline and setting lineStart to true.
-// It does nothing if lineStart was already true or if we're printing literally.
+// It does nothing if we're already at the start of a line or if we're printing literally.
 func (p *printer) endl() {
 	if p.inLiteral() {
 		return

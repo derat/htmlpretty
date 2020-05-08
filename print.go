@@ -1,7 +1,7 @@
 // Copyright 2020 Daniel Erat <dan@erat.org>.
 // All rights reserved.
 
-package pretty
+package htmlpretty
 
 import (
 	"fmt"

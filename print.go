@@ -121,14 +121,20 @@ func (p *printer) element(n *html.Node) error {
 		return fmt.Errorf("got non-element node %q of type %v", tag, n.Type)
 	}
 
+	inline := inlineTags.has(n)
+	literal := literalTags.has(n)
+	keepSpace := keepSpaceTags.has(n)
+	omitClose := omitCloseTags.has(n)
+	void := voidTags.has(n)
+
 	// Construct the opening tag.
 	tokens := openTagTokens(n)
+	openTagLen := len(strings.Join(tokens, ""))
 
 	// Start a new line for non-inline nodes. Also start inline nodes on a new line if they'd
 	// be wrapped... unless they're following a text node that didn't end with whitespace,
 	// in which case we need to be careful to not introduce new whitespace by wrapping.
-	inline := inlineTags.has(n)
-	wouldWrap := p.lineWidth+len(strings.Join(tokens, "")) > p.wrapWidth
+	wouldWrap := p.lineWidth+openTagLen > p.wrapWidth
 	prevNonSpace := n.PrevSibling != nil &&
 		(n.PrevSibling.Type != html.TextNode ||
 			!unicode.IsSpace(rune(n.PrevSibling.Data[len(n.PrevSibling.Data)-1])))
@@ -136,44 +142,56 @@ func (p *printer) element(n *html.Node) error {
 		p.endl()
 	}
 
-	// If we're starting on a new line (either explicitly or incidentally),
-	// indent attributes two more levels.
-	var wrapIndent string
-	if p.lineStart {
-		wrapIndent = strings.Repeat(p.indentStr, 2)
+	startedLine := p.lineStart
+	p.maybeIndent()
+
+	var closeTag string
+	if !void && !omitClose {
+		closeTag = "</" + n.Data + ">"
 	}
 
-	p.maybeIndent()
+	// If it looks like we can fit everything including the closing tag on a single line,
+	// treat this tag as inline.
+	if !p.inLiteral() && !p.keepSpace() && !inline && hasSingleChild(n) && n.FirstChild.Type == html.TextNode {
+		childLen := len(collapseText(escapeText(n.FirstChild.Data), nil, nil))
+		if p.lineWidth+openTagLen+childLen+len(closeTag) < p.wrapWidth {
+			inline = true
+		}
+	}
 
 	// As described above, avoid wrapping the start of inline nodes preceded by non-whitespace.
 	if inline && prevNonSpace {
 		p.write(tokens[0])
 	} else {
-		p.wrap(tokens[0], wrapIndent)
+		p.wrap(tokens[0], "")
 	}
 
 	// Let the remainder of opening tag wrap.
+	// If the token started on a new line (either explicitly or incidentally),
+	// indent attributes two more levels.
+	// TODO: Also put the first attribute on the same line?
+	var wrapIndent string
+	if startedLine {
+		wrapIndent = strings.Repeat(p.indentStr, 2)
+	}
 	for _, t := range tokens[1:] {
 		p.wrap(t, wrapIndent)
 	}
 
-	literal := literalTags.has(n)
 	if literal {
 		p.literalDepth++
 	}
-	keepSpace := keepSpaceTags.has(n)
 	if keepSpace {
 		p.keepSpaceDepth++
 	}
 
-	omitClose := omitCloseTags.has(n)
 	if !inline && !omitClose {
 		// TODO: It might be nice to put the closing tag on the same line as the opening one if no children
 		// get printed, but with the way this code is currently structured, that'd require a time machine.
 		p.endl()
 	}
 
-	if voidTags.has(n) {
+	if void {
 		if literal || keepSpace {
 			panic(fmt.Sprintf("<%s> is both literal/keep-space and void", n.Data))
 		}
@@ -215,7 +233,7 @@ func (p *printer) element(n *html.Node) error {
 
 	if !omitClose {
 		p.maybeIndent()
-		p.write("</" + n.Data + ">")
+		p.write(closeTag)
 	}
 	if !inline {
 		p.endl()
@@ -230,46 +248,28 @@ func (p *printer) text(n *html.Node) error {
 	if n.Type != html.TextNode {
 		panic(fmt.Sprintf("Got non-text node %q (type %v)", n.Data, n.Type))
 	}
+	// TODO: Can this actually happen?
+	if len(n.Data) == 0 {
+		return nil
+	}
+
+	// Write literal text... literally.
+	if p.inLiteral() {
+		p.write(n.Data)
+		return nil
+	}
 
 	s := n.Data
-	// TODO: Can this actually happen?
-	if len(s) == 0 {
-		return nil
-	}
+	s = escapeText(s)
 
-	if p.inLiteral() {
-		p.write(s)
-		return nil
-	}
-
-	// Do some hacky escaping. Avoid using html.EscapeString since its aggressiveness is
-	// a bit annoying: it also escapes `'` and `"`.
-	s = strings.ReplaceAll(s, "&", "&amp;")
-	s = strings.ReplaceAll(s, "<", "&lt;")
-	s = strings.ReplaceAll(s, ">", "&gt;")
-
+	// If we're preserving spaces (i.e. in <pre>), we need to perform escaping.
 	if p.keepSpace() {
 		p.write(s)
 		return nil
 	}
 
-	// Collapse whitespace for an inline formatting context to achieve roughly the same effect
-	// as the process described in "How does CSS process whitespace?" in
-	// https://developer.mozilla.org/en-US/docs/Web/API/Document_Object_Model/Whitespace.
-	// This is probably woefully inadequate: HTML whitespace is very complicated and I don't
-	// think it's actually possible to determine what's safe to do without knowing whether we're
-	// an inline, block, or inline-block context, which seems like it'd require handling CSS.
-	s = whitespace.ReplaceAllString(s, " ")
-
-	// Drop leading and trailing whitespace if we don't have symblings that will be printed
-	// adjacent to us -- we can presumably just use the printer's whitespace in that case.
-	if !inlineTags.has(n.PrevSibling) {
-		s = strings.TrimLeft(s, " ")
-	}
-	if !inlineTags.has(n.NextSibling) {
-		s = strings.TrimRight(s, " ")
-	}
-
+	// Otherwise, we additionally remove excess spaces.
+	s = collapseText(s, n.PrevSibling, n.NextSibling)
 	if s == "" {
 		return nil
 	}
@@ -292,9 +292,9 @@ func (p *printer) text(n *html.Node) error {
 			w = w + " "
 		}
 
-		// Avoid wrapping the first part of the text node. We don't want to reformat input
-		// like "(<a>link</a>)" as "(<a>link</a>\n)". We try to avoid "(\n<a>link</a>)" by
-		// being careful in how we wrap opening tags in element().
+		// Avoid wrapping the first part of the text node, since we don't want to reformat input
+		// like "(<a>link</a>)" as "(<a>link</a>\n)". We avoid "(\n<a>link</a>)" by being
+		// careful in how we wrap opening tags in element().
 		if i == 0 {
 			p.write(w)
 		} else {
@@ -368,4 +368,41 @@ func openTagTokens(n *html.Node) []string {
 
 	tokens[len(tokens)-1] += ">" // avoid wrapping closing bracket since it'd look funny
 	return tokens
+}
+
+// hasSingleChild returns true if n has a single child.
+func hasSingleChild(n *html.Node) bool {
+	return n.FirstChild != nil && n.FirstChild == n.LastChild
+}
+
+// escapeText performs hacky, slow escaping on s.
+// We avoid using html.EscapeString since its aggressiveness is a bit annoying:
+// it also escapes `'` and `"`.
+func escapeText(s string) string {
+	s = strings.ReplaceAll(s, "&", "&amp;")
+	s = strings.ReplaceAll(s, "<", "&lt;")
+	s = strings.ReplaceAll(s, ">", "&gt;")
+	return s
+}
+
+// collapseText removes whitespace for an inline formatting context to achieve roughly the
+// same effect as the process described in "How does CSS process whitespace?" in
+// https://developer.mozilla.org/en-US/docs/Web/API/Document_Object_Model/Whitespace.
+//
+// This is probably woefully inadequate: HTML whitespace is very complicated and I don't
+// think it's actually possible to determine what's safe to do without knowing whether we're
+// an inline, block, or inline-block context, which seems like it'd require handling CSS.
+func collapseText(s string, prevSib, nextSib *html.Node) string {
+	s = whitespace.ReplaceAllString(s, " ")
+
+	// Drop leading and trailing whitespace if we don't have symblings that will be printed
+	// adjacent to us -- we can presumably just use the printer's whitespace in that case.
+	if !inlineTags.has(prevSib) {
+		s = strings.TrimLeft(s, " ")
+	}
+	if !inlineTags.has(nextSib) {
+		s = strings.TrimRight(s, " ")
+	}
+
+	return s
 }

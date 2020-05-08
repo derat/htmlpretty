@@ -44,9 +44,7 @@ func TestPrint_Simple(t *testing.T) {
 `, "  ", 80, `<!DOCTYPE html>
 <html>
   <head>
-    <title>
-      Here's the title
-    </title>
+    <title>Here's the title</title>
   </head>
   <body>
     Here's some body text <a href="page.html">with a link</a>.
@@ -78,6 +76,12 @@ func TestPrint_Wrapping(t *testing.T) {
     <p>
       Or the end here (<a>an anchor tag</a>).
     </p>
+    <p>
+      Inline because short.
+    </p>
+    <pre> Preserve  
+  space    here.
+		</pre>
     <some-custom-element here="is an attribute with a value that can't be wrapped" and here are other attributes></some-custom-element>
    </body>
 </html>
@@ -110,6 +114,10 @@ func TestPrint_Wrapping(t *testing.T) {
     <p>
       Or the end here (<a>an anchor tag</a>).
     </p>
+    <p>Inline because short.</p>
+    <pre> Preserve  
+  space    here.
+		</pre>
     <some-custom-element
         here="is an attribute with a value that can't be wrapped"
         and here are other attributes>

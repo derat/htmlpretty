@@ -1,8 +1,11 @@
 # htmlpretty
 
-This package pretty-prints an already-parsed [HTML5] document, adding and
-removing whitespace to make it easier for humans to read. `<script>` and
-`<style>` tags and attribute values are (hopefully) left untouched.
+[![GoDoc](https://godoc.org/github.com/derat/htmlpretty?status.svg)](https://godoc.org/github.com/derat/htmlpretty)
+
+The `github.com/derat/htmlpretty` package pretty-prints an already-parsed
+[HTML5] document, adding and removing whitespace to make it easier for humans to
+read. `<script>` and `<style>` tags and attribute values are (hopefully) left
+untouched.
 
 The significance of whitespace in HTML is a very complicated topic, e.g.
 

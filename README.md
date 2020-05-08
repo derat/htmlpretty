@@ -9,7 +9,7 @@ The significance of whitespace in HTML is a very complicated topic, e.g.
 *   https://developer.mozilla.org/en-US/docs/Web/API/Document_Object_Model/Whitespace
 *   https://medium.com/@patrickbrosset/when-does-white-space-matter-in-html-b90e8a7cdd33
 
-This package's handling it is rudimentary, and I'm certain that I've gotten
+This package's handling of it is rudimentary, and I'm certain that I've gotten
 things wrong in places. As a trivial example, some lines may end up with an
 unnecessary trailing space.
 

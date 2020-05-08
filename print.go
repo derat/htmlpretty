@@ -1,6 +1,7 @@
 // Copyright 2020 Daniel Erat <dan@erat.org>.
 // All rights reserved.
 
+// Package htmlpretty pretty-prints HTML5 documents.
 package htmlpretty
 
 import (

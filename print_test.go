@@ -80,6 +80,9 @@ func TestPrint_Wrapping(t *testing.T) {
       Or the end here (<a>an anchor tag</a>).
     </p>
     <p>
+      It's okay to break if space before  <a href="https://www.example.org/">an anchor tag</a>).
+    </p>
+    <p>
       Inline because short.
     </p>
     <no-child></no-child>
@@ -130,6 +133,11 @@ func TestPrint_Wrapping(t *testing.T) {
     </p>
     <p>
       Or the end here (<a>an anchor tag</a>).
+    </p>
+    <p>
+      It's okay to break if space before 
+      <a href="https://www.example.org/">an
+      anchor tag</a>).
     </p>
     <p>Inline because short.</p>
     <no-child></no-child>

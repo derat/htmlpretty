@@ -8,7 +8,6 @@ import (
 	"io"
 	"regexp"
 	"strings"
-	"unicode"
 
 	"golang.org/x/net/html"
 )
@@ -192,8 +191,6 @@ func (p *printer) element(n *html.Node) error {
 	return nil
 }
 
-var whitespace *regexp.Regexp = regexp.MustCompile(`\s+`)
-
 // text handles the supplied node of type html.TextNode.
 func (p *printer) text(n *html.Node) error {
 	if n.Type != html.TextNode {
@@ -323,10 +320,10 @@ func (p *printer) openTag(n *html.Node) (forceInline bool) {
 	// in which case we need to be careful to not introduce new whitespace by wrapping.
 	inline := inlineTags.has(n)
 	wouldWrap := p.lineWidth+tagLen > p.wrapWidth
-	prevNonSpace := n.PrevSibling != nil &&
-		(n.PrevSibling.Type != html.TextNode ||
-			!unicode.IsSpace(rune(n.PrevSibling.Data[len(n.PrevSibling.Data)-1])))
-	if !inline || (wouldWrap && !prevNonSpace) {
+	prevTextNotSpace := n.PrevSibling != nil && n.PrevSibling.Type == html.TextNode &&
+		(n.PrevSibling.Data == "" ||
+			!whitespace.MatchString(n.PrevSibling.Data[len(n.PrevSibling.Data)-1:]))
+	if !inline || (wouldWrap && !prevTextNotSpace) {
 		p.endl()
 	}
 
@@ -359,9 +356,9 @@ func (p *printer) openTag(n *html.Node) (forceInline bool) {
 		if len(tokens[0]) < len(wrapIndent) {
 			unwrapTokens = 2
 		}
-	} else if (inline || forceInline) && prevNonSpace {
-		// As described above in the prevNonSpace comment, avoid
-		// wrapping the start of inline nodes preceded by non-whitespace.
+	} else if (inline || forceInline) && prevTextNotSpace {
+		// As described above in the prevTextNotSpace comment, avoid wrapping
+		// the start of inline nodes preceded by non-whitespace text.
 		unwrapTokens = 1
 	}
 	for i, t := range tokens {
@@ -398,6 +395,11 @@ func escapeText(s string) string {
 	s = strings.ReplaceAll(s, ">", "&gt;")
 	return s
 }
+
+// https://developer.mozilla.org/en-US/docs/Glossary/Whitespace:
+// "HTML Living Standard specifies 5 characters as the ASCII whitespace:
+// U+0009 TAB, U+000A LF, U+000C FF, U+000D CR, and U+0020 SPACE."
+var whitespace *regexp.Regexp = regexp.MustCompile(`[\t\n\f\r ]+`)
 
 // collapseText removes whitespace for an inline formatting context to achieve roughly the
 // same effect as the process described in "How does CSS process whitespace?" in

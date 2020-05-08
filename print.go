@@ -177,17 +177,16 @@ func (p *printer) element(n *html.Node) error {
 		p.endl()
 	}
 
-	// TODO: This seems like it should happen after the closing tag is printed...
+	// Avoid wrapping the closing tag.
+	if !omitClose {
+		p.maybeIndent()
+		p.write(closeTag(n))
+	}
 	if literal {
 		p.literalDepth--
 	}
 	if keepSpace {
 		p.keepSpaceDepth--
-	}
-
-	if !omitClose {
-		p.maybeIndent()
-		p.write(closeTag(n))
 	}
 	if !inline {
 		p.endl()

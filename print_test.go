@@ -61,7 +61,10 @@ func TestPrint_Wrapping(t *testing.T) {
       Here's a fairly long title with a lot of words in it.
     </title>
     <script>Stuff in this script tag shouldn't be wrapped</script>
-    <style>Ditto for everything that's in this style tag</style>
+    <style>Keep newline, no indenting
+</style>
+    <script>
+   Also preserve leading whitespace</script>
   </head>
   <body>
     <p>
@@ -93,7 +96,10 @@ func TestPrint_Wrapping(t *testing.T) {
       lot of words in it.
     </title>
     <script>Stuff in this script tag shouldn't be wrapped</script>
-    <style>Ditto for everything that's in this style tag</style>
+    <style>Keep newline, no indenting
+</style>
+    <script>
+   Also preserve leading whitespace</script>
   </head>
   <body>
     <p>

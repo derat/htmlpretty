@@ -7,6 +7,7 @@ import (
 	"os"
 	"regexp"
 	"strings"
+	"unicode"
 
 	"golang.org/x/net/html"
 )
@@ -120,31 +121,41 @@ func (p *printer) element(n *html.Node) error {
 		panic(fmt.Sprintf("Got non-element node %q (type %v)", tag, n.Type))
 	}
 
+	// Construct the opening tag.
+	tokens := openTagTokens(n)
+
+	// Start a new line for non-inline nodes. Also start inline nodes on a new line if they'd
+	// be wrapped... unless they're following a text node that didn't end with whitespace,
+	// in which case we need to be careful to not introduce new whitespace by wrapping.
 	inline := inlineTags.has(n)
-	if !inline {
+	wouldWrap := p.lineWidth+len(strings.Join(tokens, "")) > p.wrapWidth
+	prevNonSpace := n.PrevSibling != nil &&
+		(n.PrevSibling.Type != html.TextNode ||
+			!unicode.IsSpace(rune(n.PrevSibling.Data[len(n.PrevSibling.Data)-1])))
+	if !inline || (wouldWrap && !prevNonSpace) {
 		p.endl()
 	}
 
-	// If we're starting on a new line, indent attributes to the tag name plus a space when wrapping.
-	wi := 0
+	// If we're starting on a new line (either explicitly or incidentally),
+	// indent attributes to the tag name plus one space when wrapping.
+	wrapIndent := 0
 	if p.lineStart {
-		wi = len(tag) + 2
+		wrapIndent = len(tokens[0]) + 1
 	}
 
 	p.indent()
-	p.wrap("<"+tag, 0)
-	for _, a := range n.Attr {
-		as := " " + a.Key
-		if len(a.Val) > 0 {
-			// Just escape double-quotes.
-			// TODO: Ambiguous ampersands (/&[a-zA-Z0-9]+;/) are also disallowed, but I'm ignoring
-			// those for now. See https://html.spec.whatwg.org/multipage/syntax.html#syntax-attributes.
-			escaped := strings.ReplaceAll(a.Val, `"`, `&quot;`)
-			as += `="` + escaped + `"`
-		}
-		p.wrap(as, wi)
+
+	// As described above, avoid wrapping the start of inline nodes preceded by non-whitespace.
+	if inline && prevNonSpace {
+		p.write(tokens[0])
+	} else {
+		p.wrap(tokens[0], 0)
 	}
-	p.write(">") // avoid wrapping closing bracket since it'd look funny
+
+	// Let the remainder of opening tag wrap.
+	for _, t := range tokens[1:] {
+		p.wrap(t, wrapIndent)
+	}
 
 	literal := literalTags.has(n)
 	if literal {
@@ -160,7 +171,7 @@ func (p *printer) element(n *html.Node) error {
 
 	if voidTags.has(n) {
 		if literal {
-			panic(fmt.Sprintf("<%s> is both literal and void", tag))
+			panic(fmt.Sprintf("<%s> is both literal and void", n.Data))
 		}
 		return nil
 	}
@@ -197,7 +208,7 @@ func (p *printer) element(n *html.Node) error {
 
 	if !omitClose {
 		p.indent()
-		p.write("</" + tag + ">")
+		p.write("</" + n.Data + ">")
 	}
 	if !inline {
 		p.endl()
@@ -205,8 +216,7 @@ func (p *printer) element(n *html.Node) error {
 	return nil
 }
 
-var spaceAroundNewline *regexp.Regexp = regexp.MustCompile("(?s)[ \t]*\n[ \t]*")
-var repeatedSpace *regexp.Regexp = regexp.MustCompile("  +")
+var whitespace *regexp.Regexp = regexp.MustCompile(`\s+`)
 
 // text handles the supplied node of type html.TextNode.
 func (p *printer) text(n *html.Node) error {
@@ -224,14 +234,10 @@ func (p *printer) text(n *html.Node) error {
 		return nil
 	}
 
-	// Collapse whitespace for an inline formatting context roughly following the process
-	// described in "How does CSS process whitespace?" in
+	// Collapse whitespace for an inline formatting context to achieve roughly the same effect
+	// as the process described in "How does CSS process whitespace?" in
 	// https://developer.mozilla.org/en-US/docs/Web/API/Document_Object_Model/Whitespace.
-	s := n.Data
-	s = spaceAroundNewline.ReplaceAllString(s, "\n")
-	s = strings.ReplaceAll(s, "\t", " ")
-	s = strings.ReplaceAll(s, "\n", " ")
-	s = repeatedSpace.ReplaceAllString(s, " ")
+	s := whitespace.ReplaceAllString(n.Data, " ")
 
 	if !inlineTags.has(n.PrevSibling) {
 		s = strings.TrimLeft(s, " ")
@@ -261,7 +267,15 @@ func (p *printer) text(n *html.Node) error {
 		if i == len(words)-1 && endSpace && w != " " {
 			w = w + " "
 		}
-		p.wrap(w, 0)
+
+		// Avoid wrapping the first part of the text node. We don't want to reformat input
+		// like "(<a>link</a>)" as "(<a>link</a>\n)".
+		// TODO: How to prevent breaking the start of the input?
+		if i == 0 {
+			p.write(w)
+		} else {
+			p.wrap(w, 0)
+		}
 	}
 	return nil
 }
@@ -306,4 +320,25 @@ func (p *printer) write(s string) {
 	_, p.werr = io.WriteString(p.w, s)
 	p.lineStart = false
 	p.lineWidth += len(s)
+}
+
+// openTagTokens returns tokens for printing n's opening tag.
+// The returned tokens are of the form [`<foo`, ` abc`, ` def="123">`].
+func openTagTokens(n *html.Node) []string {
+	tokens := append([]string{}, "<"+n.Data)
+
+	for _, a := range n.Attr {
+		as := " " + a.Key
+		if len(a.Val) > 0 {
+			// Just escape double-quotes.
+			// TODO: Ambiguous ampersands (/&[a-zA-Z0-9]+;/) are also disallowed, but I'm ignoring
+			// those for now. See https://html.spec.whatwg.org/multipage/syntax.html#syntax-attributes.
+			escaped := strings.ReplaceAll(a.Val, `"`, `&quot;`)
+			as += `="` + escaped + `"`
+		}
+		tokens = append(tokens, as)
+	}
+
+	tokens[len(tokens)-1] += ">" // avoid wrapping closing bracket since it'd look funny
+	return tokens
 }

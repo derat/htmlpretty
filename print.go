@@ -101,7 +101,7 @@ func (p *printer) doc(n *html.Node) error {
 	for c := n.FirstChild; c != nil; c = c.NextSibling {
 		switch c.Type {
 		case html.DoctypeNode:
-			p.write("<!DOCTYPE html>")
+			p.write("<!DOCTYPE " + c.Data + ">")
 			p.endl()
 		case html.ElementNode:
 			if err := p.element(c); err != nil {

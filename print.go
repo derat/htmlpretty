@@ -67,7 +67,7 @@ var inlineTags = newTagSet(strings.Fields("a b code em i img span s strong"))
 var omitCloseTags = newTagSet(strings.Fields("li"))
 
 // Elements whose contents should be preserved unchanged (i.e. no whitespace changes or escaping).
-var literalTags = newTagSet(strings.Fields("script style"))
+var literalTags = newTagSet(strings.Fields("noscript script style"))
 
 // Elements whose contents should retain their original whitespace but still be escaped.
 var keepSpaceTags = newTagSet(strings.Fields("pre"))

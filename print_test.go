@@ -172,6 +172,7 @@ func TestPrint_Escaping(t *testing.T) {
     <script>
       var i = 1 > 2; var j = 1 < 2;
     </script>
+    <noscript><style>body {color: red}<style></noscript>
     <style>
       div>span { color: black; }
     </style>
@@ -180,6 +181,9 @@ func TestPrint_Escaping(t *testing.T) {
     Here's an escaped &lt;tag&gt; &amp; an "ampersand".
     <pre>Here's another
               escaped &lt;tag&gt;.</pre>
+    <noscript>
+         JavaScript <b>must</b> be enabled.
+    </noscript>
   </body>
 </html>
 `

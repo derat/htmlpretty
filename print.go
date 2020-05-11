@@ -218,7 +218,7 @@ func (p *printer) text(n *html.Node) error {
 	}
 
 	// Otherwise, we additionally remove excess spaces.
-	s = collapseText(s, n.PrevSibling, n.NextSibling)
+	s = collapseText(s, n)
 	if s == "" {
 		return nil
 	}
@@ -348,7 +348,7 @@ func (p *printer) openTag(n *html.Node) (forceInline bool) {
 		if n.FirstChild == nil {
 			childLen = 0
 		} else if hasSingleChild(n) && n.FirstChild.Type == html.TextNode {
-			childLen = len(collapseText(escapeText(n.FirstChild.Data), nil, nil))
+			childLen = len(collapseText(escapeText(n.FirstChild.Data), n.FirstChild))
 		}
 		if childLen >= 0 && (p.lineWidth+tagLen+childLen+len(closeTag(n)) < p.wrapWidth || p.wrapWidth <= 0) {
 			forceInline = true
@@ -416,16 +416,19 @@ var whitespace *regexp.Regexp = regexp.MustCompile(`[\t\n\f\r ]+`)
 // This is probably woefully inadequate: HTML whitespace is very complicated and I don't
 // think it's actually possible to determine what's safe to do without knowing whether we're
 // an inline, block, or inline-block context, which seems like it'd require handling CSS.
-func collapseText(s string, prevSib, nextSib *html.Node) string {
+func collapseText(s string, n *html.Node) string {
 	s = whitespace.ReplaceAllString(s, " ")
 
 	// Drop leading and trailing whitespace if we don't have siblings that will be printed
 	// adjacent to us -- we can presumably just use the printer's whitespace in that case.
-	if !inlineTags.has(prevSib) {
-		s = strings.TrimLeft(s, " ")
-	}
-	if !inlineTags.has(nextSib) {
-		s = strings.TrimRight(s, " ")
+	// Preserve the whitespace if we're inside of an inline element, though.
+	if !inlineTags.has(n.Parent) {
+		if !inlineTags.has(n.PrevSibling) {
+			s = strings.TrimLeft(s, " ")
+		}
+		if !inlineTags.has(n.NextSibling) {
+			s = strings.TrimRight(s, " ")
+		}
 	}
 
 	return s

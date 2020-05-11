@@ -89,6 +89,9 @@ func TestPrint_Wrapping(t *testing.T) {
       <span>But don't wrap if inside<span>of an inline tag.</span></span>
     </p>
     <p>
+      <span>Need to keep this trail </span>space in text inside inline tag.
+    </p>
+    <p>
       Inline because short.
     </p>
     <no-child></no-child>
@@ -156,6 +159,10 @@ func TestPrint_Wrapping(t *testing.T) {
     <p>
       <span>But don't wrap if inside<span>of
       an inline tag.</span></span>
+    </p>
+    <p>
+      <span>Need to keep this trail </span>space
+      in text inside inline tag.
     </p>
     <p>Inline because short.</p>
     <no-child></no-child>

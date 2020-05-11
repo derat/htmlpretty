@@ -225,10 +225,19 @@ func (p *printer) text(n *html.Node) error {
 
 	p.maybeIndent()
 
-	// Write the text one word at a time.
-	// This is hopefully safe since we condensed spaces above.
 	startSpace := s[0] == ' '
 	endSpace := s[len(s)-1] == ' '
+
+	// Avoid wrapping the first part of the text node if it follows or is in an inline element and doesn't already
+	// start with whitespace, since we don't want to reformat input like "(<a>link</a>)" as "(<a>link</a>\n)".
+	// We avoid "(\n<a>link</a>)" by being careful in how we wrap opening tags in openTag().
+	wrapStart := 0
+	if (inlineTags.has(n.PrevSibling) || inlineTags.has(n.Parent)) && !startSpace {
+		wrapStart = 1
+	}
+
+	// Write the text one word at a time.
+	// This is hopefully safe since we condensed spaces above.
 	words := strings.Fields(strings.TrimSpace(s))
 	for i, w := range words {
 		// Try to preserve starting and ending spaces. Also prepend a space to each
@@ -241,10 +250,7 @@ func (p *printer) text(n *html.Node) error {
 			w = w + " "
 		}
 
-		// Avoid wrapping the first part of the text node, since we don't want to reformat input
-		// like "(<a>link</a>)" as "(<a>link</a>\n)". We avoid "(\n<a>link</a>)" by being
-		// careful in how we wrap opening tags in element().
-		if i == 0 {
+		if i < wrapStart {
 			p.write(w)
 		} else {
 			p.wrap(w, "")

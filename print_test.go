@@ -100,7 +100,10 @@ func TestPrint_Wrapping(t *testing.T) {
     <p>
       Only do that<a href="/when/the/tag/starts/the/line/though" attr>link</a>.
     </p>
-   </body>
+    <p>
+      <code><span>keep</span><span>this</span><span>all</span><span>on</span><span>a</span><span>single</span><span>line</span></code>
+    </p>
+  </body>
 </html>
 `, "  ", 41, `<!DOCTYPE html>
 <html>
@@ -159,6 +162,9 @@ func TestPrint_Wrapping(t *testing.T) {
       Only do that<a
       href="/when/the/tag/starts/the/line/though"
       attr>link</a>.
+    </p>
+    <p>
+      <code><span>keep</span><span>this</span><span>all</span><span>on</span><span>a</span><span>single</span><span>line</span></code>
     </p>
   </body>
 </html>

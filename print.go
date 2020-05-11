@@ -318,14 +318,16 @@ func (p *printer) openTag(n *html.Node) (forceInline bool) {
 	tagLen := len(strings.Join(tokens, ""))
 
 	// Start a new line for non-inline nodes. Also start inline nodes on a new line if they'd
-	// be wrapped... unless they're following a text node that didn't end with whitespace,
-	// in which case we need to be careful to not introduce new whitespace by wrapping.
+	// be wrapped... unless they're following another inline node or a text node that didn't end
+	// with whitespace or another inline node, in which case we need to be careful to not introduce
+	// new whitespace by wrapping.
 	inline := inlineTags.has(n)
 	wouldWrap := p.wrapWidth > 0 && p.lineWidth+tagLen > p.wrapWidth
-	prevTextNotSpace := n.PrevSibling != nil && n.PrevSibling.Type == html.TextNode &&
-		(n.PrevSibling.Data == "" ||
-			!whitespace.MatchString(n.PrevSibling.Data[len(n.PrevSibling.Data)-1:]))
-	if !inline || (wouldWrap && !prevTextNotSpace) {
+	prev := n.PrevSibling
+	prevTextNotSpace := prev != nil && prev.Type == html.TextNode &&
+		(prev.Data == "" || !whitespace.MatchString(prev.Data[len(prev.Data)-1:]))
+	startSpaceMatters := inlineTags.has(prev) || prevTextNotSpace
+	if !inline || (wouldWrap && !startSpaceMatters) {
 		p.endl()
 	}
 
@@ -358,9 +360,7 @@ func (p *printer) openTag(n *html.Node) (forceInline bool) {
 		if len(tokens[0]) < len(wrapIndent) {
 			unwrapTokens = 2
 		}
-	} else if (inline || forceInline) && prevTextNotSpace {
-		// As described above in the prevTextNotSpace comment, avoid wrapping
-		// the start of inline nodes preceded by non-whitespace text.
+	} else if (inline || forceInline) && startSpaceMatters {
 		unwrapTokens = 1
 	}
 	for i, t := range tokens {

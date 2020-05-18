@@ -59,7 +59,7 @@ var voidTags = newTagSet(strings.Fields("area base br col embed hr img input lin
 // Contents are not also not nested: The first child instead appears immediately after
 // the opening tag, and the last child appears immediately after the closing tag.
 // Spaces in text nodes adjacent to these tags are preserved.
-var inlineTags = newTagSet(strings.Fields("a b code em i img picture span s source strong"))
+var inlineTags = newTagSet(strings.Fields("a amp-img b code em i img picture span s source strong"))
 
 // Non-void elements whose closing tags are omitted.
 // Similar to inline tags, these tags also don't nest their contents.
@@ -324,7 +324,7 @@ func (p *printer) openTag(n *html.Node) (forceInline bool) {
 	tagLen := len(strings.Join(tokens, ""))
 
 	// Start a new line for non-inline nodes. Also start inline nodes on a new line if they'd
-	// be wrapped... unless they're following another inline node or a text node that didn't end
+	// be wrapped... unless they're in or following another inline node or a text node that didn't end
 	// with whitespace or another inline node, in which case we need to be careful to not introduce
 	// new whitespace by wrapping.
 	inline := inlineTags.has(n)
@@ -332,7 +332,7 @@ func (p *printer) openTag(n *html.Node) (forceInline bool) {
 	prev := n.PrevSibling
 	prevTextNotSpace := prev != nil && prev.Type == html.TextNode &&
 		(prev.Data == "" || !whitespace.MatchString(prev.Data[len(prev.Data)-1:]))
-	startSpaceMatters := inlineTags.has(prev) || prevTextNotSpace
+	startSpaceMatters := inlineTags.has(prev) || inlineTags.has(n.Parent) || prevTextNotSpace
 	if !inline || (wouldWrap && !startSpaceMatters) {
 		p.endl()
 	}

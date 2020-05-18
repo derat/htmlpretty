@@ -21,10 +21,22 @@ func checkPrint(t *testing.T, doc, indent string, wrap int, exp string) {
 		t.Fatal("Print failed: ", err)
 	}
 	if b.String() != exp {
+		// Show the strings starting at the first non-matching line.
+		got := strings.ReplaceAll(b.String(), "\n", "|\n")
+		want := strings.ReplaceAll(exp, "\n", "|\n")
+		start := 0
+		for i := 0; i < len(got) && i < len(want) && got[i] == want[i]; i++ {
+			if got[i] == '\n' {
+				start = i + 1
+			}
+		}
+		var pre string
+		if start > 0 {
+			pre = "...\n"
+		}
+
 		t.Errorf("Print didn't produce expected output.\n"+
-			"Got:\n---\n%s\n---\nWant:\n---\n%s\n---\n",
-			strings.ReplaceAll(b.String(), "\n", "|\n"),
-			strings.ReplaceAll(exp, "\n", "|\n"))
+			"Got:\n---\n%s%s\n---\nWant:\n---\n%s%s\n---\n", pre, got[start:], pre, want[start:])
 	}
 }
 
@@ -93,6 +105,9 @@ func TestPrint_Wrapping(t *testing.T) {
     </p>
     <p>
       Inline because short.
+    </p>
+    <p>
+      <a href="http://dont.wrap.consecutive.inline.tags.tld"><picture><source type="image/webp" srcset="image.webp 40w" sizes="40px"><img src="image.png" width="40" height="30"></picture></a>
     </p>
     <no-child></no-child>
     <no-child-wrap>
@@ -165,6 +180,13 @@ func TestPrint_Wrapping(t *testing.T) {
       in text inside inline tag.
     </p>
     <p>Inline because short.</p>
+    <p>
+      <a href="http://dont.wrap.consecutive.inline.tags.tld"><picture><source
+      type="image/webp"
+      srcset="image.webp 40w"
+      sizes="40px"><img src="image.png"
+      width="40" height="30"></picture></a>
+    </p>
     <no-child></no-child>
     <no-child-wrap></no-child-wrap>
     <no-child-but-long-tag-name-should-wrap>

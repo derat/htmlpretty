@@ -59,7 +59,7 @@ var voidTags = newTagSet(strings.Fields("area base br col embed hr img input lin
 // Contents are not also not nested: The first child instead appears immediately after
 // the opening tag, and the last child appears immediately after the closing tag.
 // Spaces in text nodes adjacent to these tags are preserved.
-var inlineTags = newTagSet(strings.Fields("a b code em i img span s strong"))
+var inlineTags = newTagSet(strings.Fields("a b code em i img picture span s source strong"))
 
 // Non-void elements whose closing tags are omitted.
 // Similar to inline tags, these tags also don't nest their contents.

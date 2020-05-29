@@ -315,7 +315,7 @@ func (p *printer) openTag(n *html.Node) (forceInline bool) {
 			// Just escape double-quotes.
 			// TODO: Ambiguous ampersands (/&[a-zA-Z0-9]+;/) are also disallowed, but I'm ignoring
 			// those for now. See https://html.spec.whatwg.org/multipage/syntax.html#syntax-attributes.
-			escaped := strings.ReplaceAll(a.Val, `"`, `&quot;`)
+			escaped := strings.Replace(a.Val, `"`, `&quot;`, -1)
 			as += `="` + escaped + `"`
 		}
 		tokens = append(tokens, as)
@@ -398,9 +398,9 @@ func closeTag(n *html.Node) string {
 // We avoid using html.EscapeString since its aggressiveness is a bit annoying:
 // it also escapes `'` and `"`.
 func escapeText(s string) string {
-	s = strings.ReplaceAll(s, "&", "&amp;")
-	s = strings.ReplaceAll(s, "<", "&lt;")
-	s = strings.ReplaceAll(s, ">", "&gt;")
+	s = strings.Replace(s, "&", "&amp;", -1)
+	s = strings.Replace(s, "<", "&lt;", -1)
+	s = strings.Replace(s, ">", "&gt;", -1)
 	return s
 }
 

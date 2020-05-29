@@ -22,8 +22,8 @@ func checkPrint(t *testing.T, doc, indent string, wrap int, exp string) {
 	}
 	if b.String() != exp {
 		// Show the strings starting at the first non-matching line.
-		got := strings.ReplaceAll(b.String(), "\n", "|\n")
-		want := strings.ReplaceAll(exp, "\n", "|\n")
+		got := strings.Replace(b.String(), "\n", "|\n", -1)
+		want := strings.Replace(exp, "\n", "|\n", -1)
 		start := 0
 		for i := 0; i < len(got) && i < len(want) && got[i] == want[i]; i++ {
 			if got[i] == '\n' {

@@ -117,7 +117,7 @@ func TestPrint_Wrapping(t *testing.T) {
     <pre> Preserve  
   space    here.
 		</pre>
-    <some-custom-element here="is an attribute with a value that can't be wrapped" and here are other attributes></some-custom-element>
+    <some-custom-element here=" is an  attribute with a value that can't be wrapped " and here are other attributes class=" foo  	bar "></some-custom-element>
     <p>
       <a href="/keep/this/long/first/attribute/on/the/same/line/as/the/opening/tag" but wrap everything else>link</a>
     </p>
@@ -195,8 +195,9 @@ func TestPrint_Wrapping(t *testing.T) {
   space    here.
 		</pre>
     <some-custom-element
-        here="is an attribute with a value that can't be wrapped"
-        and here are other attributes>
+        here=" is an  attribute with a value that can't be wrapped "
+        and here are other attributes
+        class="foo bar">
     </some-custom-element>
     <p>
       <a href="/keep/this/long/first/attribute/on/the/same/line/as/the/opening/tag"

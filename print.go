@@ -312,11 +312,18 @@ func (p *printer) openTag(n *html.Node) (forceInline bool) {
 	for _, a := range n.Attr {
 		as := " " + a.Key
 		if len(a.Val) > 0 {
-			// Just escape double-quotes.
+			// Escape double-quotes.
 			// TODO: Ambiguous ampersands (/&[a-zA-Z0-9]+;/) are also disallowed, but I'm ignoring
 			// those for now. See https://html.spec.whatwg.org/multipage/syntax.html#syntax-attributes.
-			escaped := strings.Replace(a.Val, `"`, `&quot;`, -1)
-			as += `="` + escaped + `"`
+			val := strings.Replace(a.Val, `"`, `&quot;`, -1)
+
+			// Collapse repeated whitespace in 'class' attributes and remove leading and trailing
+			// spaces (https://html.spec.whatwg.org/multipage/dom.html#global-attributes:classes-2).
+			if a.Key == "class" {
+				val = strings.TrimSpace(whitespace.ReplaceAllString(val, " "))
+			}
+
+			as += `="` + val + `"`
 		}
 		tokens = append(tokens, as)
 	}

@@ -1,7 +1,7 @@
 # htmlpretty
 
 [![GoDoc](https://godoc.org/github.com/derat/htmlpretty?status.svg)](https://godoc.org/github.com/derat/htmlpretty)
-![Build Status](https://storage.googleapis.com/derat-build-badges/ae3a4b42-a7c9-4837-9060-85f6b4847dec.svg)
+[![Build Status](https://storage.googleapis.com/derat-build-badges/ae3a4b42-a7c9-4837-9060-85f6b4847dec.svg)](https://storage.googleapis.com/derat-build-badges/ae3a4b42-a7c9-4837-9060-85f6b4847dec.html)
 
 The `github.com/derat/htmlpretty` Go package pretty-prints an already-parsed
 [HTML5] document, adding and removing whitespace to make it easier for humans to

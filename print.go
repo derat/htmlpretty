@@ -57,9 +57,15 @@ var voidTags = newTagSet(strings.Fields("area base br col embed hr img input lin
 // Elements that appear inline.
 // No newline is added before the element or after it.
 // Contents are not also not nested: The first child instead appears immediately after
-// the opening tag, and the last child appears immediately after the closing tag.
+// the opening tag, and the last child appears immediately before the closing tag.
 // Spaces in text nodes adjacent to these tags are preserved.
 var inlineTags = newTagSet(strings.Fields("a amp-img b code em i img picture span s source strong"))
+
+// Elements whose children should be indented and displayed on their own lines.
+// This overrides inlineTags's behavior, and it primarily exists to improve the
+// formatting of picture elements containing source and img elements, and of
+// nested amp-img elements.
+var listTags = newTagSet(strings.Fields("amp-img ol picture ul"))
 
 // Non-void elements whose closing tags are omitted.
 // Similar to inline tags, these tags also don't nest their contents.
@@ -137,11 +143,6 @@ func (p *printer) element(n *html.Node) error {
 		p.keepSpaceDepth++
 	}
 
-	omitClose := omitCloseTags.has(n)
-	if !inline && !omitClose {
-		p.endl()
-	}
-
 	if voidTags.has(n) {
 		if literal || keepSpace {
 			panic(fmt.Sprintf("<%s> is both literal/keep-space and void", n.Data))
@@ -149,30 +150,43 @@ func (p *printer) element(n *html.Node) error {
 		return nil
 	}
 
-	// Indent if needed and print the children.
-	if !inline {
-		p.level++
-	}
-	for c := n.FirstChild; c != nil; c = c.NextSibling {
-		switch c.Type {
-		case html.ElementNode:
-			if err := p.element(c); err != nil {
-				return err
+	hasChildren := n.FirstChild != nil
+	listChildren := listTags.has(n)
+	omitClose := omitCloseTags.has(n)
+
+	if hasChildren {
+		// Indent if needed before printing the children.
+		if !inline || listChildren {
+			if !omitClose {
+				p.endl()
 			}
-		case html.TextNode:
-			if err := p.text(c); err != nil {
-				return err
-			}
-		case html.CommentNode:
-			// TODO: Don't strip comments, maybe?
-			continue
-		default:
-			return fmt.Errorf("unexpected node %q of type %d", c.Data, c.Type)
+			p.level++
 		}
-	}
-	if !inline {
-		p.level--
-		p.endl()
+
+		for c := n.FirstChild; c != nil; c = c.NextSibling {
+			switch c.Type {
+			case html.ElementNode:
+				if err := p.element(c); err != nil {
+					return err
+				}
+				if listChildren {
+					p.endl()
+				}
+			case html.TextNode:
+				if err := p.text(c); err != nil {
+					return err
+				}
+			case html.CommentNode:
+				// TODO: Don't strip comments, maybe?
+				continue
+			default:
+				return fmt.Errorf("unexpected node %q of type %d", c.Data, c.Type)
+			}
+		}
+		if !inline || listChildren {
+			p.level--
+			p.endl()
+		}
 	}
 
 	// Avoid wrapping the closing tag.

@@ -127,6 +127,10 @@ func TestPrint_Wrapping(t *testing.T) {
     <p>
       <code><span>keep</span><span>this</span><span>all</span><span>on</span><span>a</span><span>single</span><span>line</span></code>
     </p>
+    <p>
+      <amp-img layout="responsive" src="my_images/some_long_url.webp" sizes="400px" srcset="my_images/some_long_url.webp 400w" width="400" height="300" alt="Here is the alt text, taking up space..."><amp-img placeholder layout="responsive" src="data:image/gif;base64,R0lGODlhAwADAIMAAF5ZOXJlRqaScnNsTKGNb7iigW1oUIN2YLCaegAAAAAAAAAAAAAAAAAAAAAAAAAAACwAAAAAAwADAAAEB2CYQI4oKAIAOw==" width="400" height="300" alt="Here is the alt text, taking up space..."></amp-img></amp-img>
+    </p>
+    <p><amp-img src="a.png"></amp-img></p>
   </body>
 </html>
 `, "  ", 41, `<!DOCTYPE html>
@@ -181,11 +185,13 @@ func TestPrint_Wrapping(t *testing.T) {
     </p>
     <p>Inline because short.</p>
     <p>
-      <a href="http://dont.wrap.consecutive.inline.tags.tld"><picture><source
-      type="image/webp"
-      srcset="image.webp 40w"
-      sizes="40px"><img src="image.png"
-      width="40" height="30"></picture></a>
+      <a href="http://dont.wrap.consecutive.inline.tags.tld"><picture>
+        <source type="image/webp"
+            srcset="image.webp 40w"
+            sizes="40px">
+        <img src="image.png" width="40"
+            height="30">
+      </picture></a>
     </p>
     <no-child></no-child>
     <no-child-wrap></no-child-wrap>
@@ -197,8 +203,7 @@ func TestPrint_Wrapping(t *testing.T) {
     <some-custom-element
         here=" is an  attribute with a value that can't be wrapped "
         and here are other attributes
-        class="foo bar">
-    </some-custom-element>
+        class="foo bar"></some-custom-element>
     <p>
       <a href="/keep/this/long/first/attribute/on/the/same/line/as/the/opening/tag"
           but wrap everything else>link</a>
@@ -210,6 +215,23 @@ func TestPrint_Wrapping(t *testing.T) {
     </p>
     <p>
       <code><span>keep</span><span>this</span><span>all</span><span>on</span><span>a</span><span>single</span><span>line</span></code>
+    </p>
+    <p>
+      <amp-img layout="responsive"
+          src="my_images/some_long_url.webp"
+          sizes="400px"
+          srcset="my_images/some_long_url.webp 400w"
+          width="400" height="300"
+          alt="Here is the alt text, taking up space...">
+        <amp-img placeholder
+            layout="responsive"
+            src="data:image/gif;base64,R0lGODlhAwADAIMAAF5ZOXJlRqaScnNsTKGNb7iigW1oUIN2YLCaegAAAAAAAAAAAAAAAAAAAAAAAAAAACwAAAAAAwADAAAEB2CYQI4oKAIAOw=="
+            width="400" height="300"
+            alt="Here is the alt text, taking up space..."></amp-img>
+      </amp-img>
+    </p>
+    <p>
+      <amp-img src="a.png"></amp-img>
     </p>
   </body>
 </html>
@@ -239,6 +261,35 @@ func TestPrint_Escaping(t *testing.T) {
 </html>
 `
 	checkPrint(t, doc, "  ", 80, doc)
+}
+
+func TestPrint_List(t *testing.T) {
+	checkPrint(t, `<!DOCTYPE html>
+<html>
+  <head>
+  </head>
+  <body>
+    <ol><li>First<li>Second</ol>
+	<ul><li>First<li>Second<li>Third: this one is a bit longer and needs multiple lines</ul>
+  </body>
+</html>
+`, "  ", 50, `<!DOCTYPE html>
+<html>
+  <head></head>
+  <body>
+    <ol>
+      <li>First
+      <li>Second
+    </ol>
+    <ul>
+      <li>First
+      <li>Second
+      <li>Third: this one is a bit longer and
+        needs multiple lines
+    </ul>
+  </body>
+</html>
+`)
 }
 
 func TestPrint_NoWrap(t *testing.T) {

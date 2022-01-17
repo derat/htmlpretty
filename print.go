@@ -60,7 +60,7 @@ var voidTags = newTagSet(strings.Fields("area base br col embed hr img input lin
 // the opening tag, and the last child appears immediately before the closing tag.
 // Spaces in text nodes adjacent to these tags are preserved.
 // This is based on the list at https://developer.mozilla.org/en-US/docs/Web/HTML/Inline_elements.
-var inlineTags = newTagSet(strings.Fields("a abbr acronym amp-img b big cite code data def dfn em " +
+var inlineTags = newTagSet(strings.Fields("a abbr acronym amp-img b big cite code data def del dfn em " +
 	"i img ins kbd mark picture q s small span source strong sub sup svg tt u wbr"))
 
 // Elements whose children should be indented and displayed on their own lines.

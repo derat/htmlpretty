@@ -241,6 +241,15 @@ func (p *printer) text(n *html.Node) error {
 
 	p.maybeIndent()
 
+	// If we collapsed the text node to a single space, just print it: the word-at-a-time code below
+	// wouldn't print anything, which would result in us dropping deliberate whitespace between
+	// inline elements. This is a bit hokey, as it can result in us adding a trailing space to a
+	// line unnecessarily if the next line is wrapped, but that should be harmless.
+	if s == " " {
+		p.write(s)
+		return nil
+	}
+
 	startSpace := s[0] == ' '
 	endSpace := s[len(s)-1] == ' '
 

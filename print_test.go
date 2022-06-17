@@ -308,3 +308,21 @@ func TestPrint_NoWrap(t *testing.T) {
 </html>
 `)
 }
+
+func TestPrint_PreserveSpaceBetweenInline(t *testing.T) {
+	checkPrint(t, `<!DOCTYPE html>
+<html>
+  <head></head>
+  <body>
+    Preserve space between <code>inline</code> <span>elements</span>.
+  </body>
+</html>
+`, "  ", 80, `<!DOCTYPE html>
+<html>
+  <head></head>
+  <body>
+    Preserve space between <code>inline</code> <span>elements</span>.
+  </body>
+</html>
+`)
+}
